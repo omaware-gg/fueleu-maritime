@@ -1,6 +1,7 @@
 # AI Agent Workflow Log
 
 ## Agents Used
+- Claude Sonnet 4.6 Extended (to generate the entire workflow)
 - Cursor Agent
 - Claude Opus 4.6
 
@@ -1023,5 +1024,316 @@ create(year, members):
     INSERT INTO pools (year) VALUES ($1) RETURNING id, year, created_at
     For each member: INSERT INTO pool_members (pool_id, ship_id, cb_before, cb_after)
   Return Pool domain object with members array.
+```
+
+### PROMPT 4.2 - Backend: Express HTTP routers
+
+```Implement all four Express routers in /backend/src/adapters/inbound/http/routes/.
+Each router file accepts a pre-built use-case instance via a factory function.
+No business logic in routers — only HTTP parsing and delegation.
+Wrap every handler in try/catch. Return:
+  - 200/201 with JSON data on success
+  - 400 with { error: message } for domain/validation errors  
+  - 500 with { error: 'Internal server error' } for unexpected errors
+
+───────────────────────────
+/adapters/inbound/http/routes/routesRouter.ts
+───────────────────────────
+
+import { Router } from 'express';
+import { IRouteService } from '@core/ports/inbound/IRouteService';
+
+export function createRoutesRouter(routeService: IRouteService): Router {
+  const router = Router();
+
+  // GET /routes?vesselType=&fuelType=&year=
+  router.get('/', async (req, res) => { ... })
+
+  // POST /routes/:id/baseline
+  router.post('/:id/baseline', async (req, res) => { ... })
+
+  // GET /routes/comparison
+  // IMPORTANT: Define this BEFORE '/:id' to avoid route conflict
+  router.get('/comparison', async (req, res) => { ... })
+
+  return router;
+}
+
+NOTE: Register /comparison BEFORE /:id/baseline in the router definition order.
+
+───────────────────────────
+/adapters/inbound/http/routes/complianceRouter.ts
+───────────────────────────
+
+export function createComplianceRouter(complianceService: IComplianceService): Router
+
+  // GET /compliance/cb?shipId=R001&year=2025
+  router.get('/cb', async (req, res) => {
+    // Validate shipId and year query params are present
+    // Return { shipId, year, cb, energyMj }
+  })
+
+  // GET /compliance/adjusted-cb?shipId=R001&year=2025  
+  router.get('/adjusted-cb', async (req, res) => {
+    // Return { shipId, year, adjustedCb, rawCb }
+  })
+
+───────────────────────────
+/adapters/inbound/http/routes/bankingRouter.ts
+───────────────────────────
+
+export function createBankingRouter(bankingService: IBankingService): Router
+
+  // GET /banking/records?shipId=R001&year=2025
+  router.get('/records', async (req, res) => { ... })
+
+  // POST /banking/bank  body: { shipId, year, amount }
+  router.post('/bank', async (req, res) => {
+    // Validate body fields present and amount > 0
+    // Return { cbBefore, banked, cbAfter }
+  })
+
+  // POST /banking/apply  body: { shipId, year, amount }
+  router.post('/apply', async (req, res) => {
+    // Validate body fields present and amount > 0
+    // Return { cbBefore, applied, cbAfter }
+  })
+
+───────────────────────────
+/adapters/inbound/http/routes/poolsRouter.ts
+───────────────────────────
+
+export function createPoolsRouter(poolService: IPoolService): Router
+
+  // POST /pools  body: { year, members: [{ shipId, cb }] }
+  router.post('/', async (req, res) => {
+    // Validate year present, members is array with >= 2 items
+    // Return pool with cb_after per member
+    // 201 on success
+  })
+
+───────────────────────────
+/infrastructure/server/index.ts
+───────────────────────────
+
+import express from 'express';
+import cors from 'cors';
+import dotenv from 'dotenv';
+dotenv.config();
+
+// Import all Postgres adapters
+// Import all use-case classes
+// Import all router factories
+
+const app = express();
+app.use(cors({ origin: 'http://localhost:5173' }));
+app.use(express.json());
+
+// Wire up dependency injection:
+const routeRepo = new RouteRepository();
+const complianceRepo = new ComplianceRepository();
+const bankingRepo = new BankingRepository();
+const poolRepo = new PoolRepository();
+
+const routeService = new RouteUseCases(routeRepo);
+const complianceService = new ComplianceUseCases(routeRepo, complianceRepo, bankingRepo);
+const bankingService = new BankingUseCases(routeRepo, complianceRepo, bankingRepo);
+const poolService = new PoolUseCases(poolRepo);
+
+// Mount routers
+app.use('/routes', createRoutesRouter(routeService));
+app.use('/compliance', createComplianceRouter(complianceService));
+app.use('/banking', createBankingRouter(bankingService));
+app.use('/pools', createPoolsRouter(poolService));
+
+// Health check
+app.get('/health', (_req, res) => res.json({ status: 'ok' }));
+
+const PORT = Number(process.env.PORT) || 3001;
+app.listen(PORT, () => console.log(`FuelEU backend running on port ${PORT}`));
+
+export default app;
+```
+
+### PROMPT 5 - Backend: Tests
+
+```Write all backend tests in /backend/src/__tests__/.
+Use Jest. Domain unit tests need zero mocks. Use-case tests mock repositories with jest.fn().
+Integration tests use supertest against the actual Express app (requires DB running).
+
+───────────────────────────
+__tests__/domain/Compliance.test.ts
+───────────────────────────
+
+import { computeCB, computeEnergyMj, TARGET_GHG_INTENSITY, LCV_MJ_PER_TONNE } from '@core/domain/Compliance';
+
+describe('computeEnergyMj', () => {
+  it('5000 tonnes * 41000 MJ/t = 205,000,000 MJ', () => {
+    expect(computeEnergyMj(5000)).toBe(205_000_000);
+  });
+});
+
+describe('computeCB', () => {
+  it('returns 0 when ghgIntensity equals target', () => {
+    expect(computeCB(TARGET_GHG_INTENSITY, 5000)).toBeCloseTo(0, 2);
+  });
+  it('returns negative (deficit) when ghgIntensity > target — R001 scenario', () => {
+    const cb = computeCB(91.0, 5000);
+    expect(cb).toBeLessThan(0);
+    // (89.3368 - 91.0) * 205_000_000 = -340,240,000
+    expect(cb).toBeCloseTo(-340_240_000, 0);
+  });
+  it('returns positive (surplus) when ghgIntensity < target — R002 scenario', () => {
+    const cb = computeCB(88.0, 4800);
+    expect(cb).toBeGreaterThan(0);
+  });
+});
+
+───────────────────────────
+__tests__/domain/Comparison.test.ts
+───────────────────────────
+
+import { computeComparison } from '@core/domain/Comparison';
+
+describe('computeComparison', () => {
+  it('returns negative percentDiff and compliant=true when comparison < baseline', () => {
+    const result = computeComparison(91.0, 88.0);
+    expect(result.percentDiff).toBeCloseTo(-3.296, 2);
+    expect(result.compliant).toBe(true);
+  });
+  it('returns positive percentDiff and compliant=false when comparison > target', () => {
+    const result = computeComparison(91.0, 93.5);
+    expect(result.percentDiff).toBeCloseTo(2.747, 2);
+    expect(result.compliant).toBe(false);
+  });
+  it('throws when baseline is 0', () => {
+    expect(() => computeComparison(0, 88.0)).toThrow();
+  });
+  it('marks R004 (89.2) as compliant since 89.2 <= 89.3368', () => {
+    const result = computeComparison(91.0, 89.2);
+    expect(result.compliant).toBe(true);
+  });
+});
+
+───────────────────────────
+__tests__/domain/Banking.test.ts
+───────────────────────────
+
+import { bankSurplus, applyBanked } from '@core/domain/Banking';
+
+describe('bankSurplus', () => {
+  it('returns amount when CB is positive', () => expect(bankSurplus(500)).toBe(500));
+  it('throws when CB is 0', () => expect(() => bankSurplus(0)).toThrow());
+  it('throws when CB is negative', () => expect(() => bankSurplus(-100)).toThrow());
+});
+
+describe('applyBanked', () => {
+  it('applies full deficit when banked > |deficit|', () => {
+    const { applied, cbAfter } = applyBanked(200, -150);
+    expect(applied).toBe(150);
+    expect(cbAfter).toBe(0);
+  });
+  it('applies partial when banked < |deficit|', () => {
+    const { applied, cbAfter } = applyBanked(100, -150);
+    expect(applied).toBe(100);
+    expect(cbAfter).toBe(-50);
+  });
+  it('throws when no banked surplus', () => {
+    expect(() => applyBanked(0, -100)).toThrow();
+  });
+  it('throws when CB is not in deficit', () => {
+    expect(() => applyBanked(200, 50)).toThrow();
+  });
+});
+
+───────────────────────────
+__tests__/domain/Pool.test.ts
+───────────────────────────
+
+import { validatePool, allocatePool } from '@core/domain/Pool';
+
+describe('validatePool', () => {
+  it('valid when sum >= 0', () => {
+    expect(validatePool([{ shipId: 'A', cb: 100 }, { shipId: 'B', cb: -50 }]).valid).toBe(true);
+  });
+  it('invalid when sum < 0', () => {
+    const r = validatePool([{ shipId: 'A', cb: 50 }, { shipId: 'B', cb: -200 }]);
+    expect(r.valid).toBe(false);
+    expect(r.reason).toContain('must be >= 0');
+  });
+  it('invalid with fewer than 2 members', () => {
+    expect(validatePool([{ shipId: 'A', cb: 100 }]).valid).toBe(false);
+  });
+});
+
+describe('allocatePool', () => {
+  it('transfers surplus to deficit correctly', () => {
+    const result = allocatePool([
+      { shipId: 'S', cb: 200 },
+      { shipId: 'D', cb: -100 },
+    ]);
+    const surplus = result.find(m => m.shipId === 'S')!;
+    const deficit = result.find(m => m.shipId === 'D')!;
+    expect(deficit.cbAfter).toBe(0);
+    expect(surplus.cbAfter).toBe(100);
+  });
+  it('surplus ship does not exit negative', () => {
+    const result = allocatePool([
+      { shipId: 'S', cb: 100 },
+      { shipId: 'D', cb: -50 },
+    ]);
+    const s = result.find(m => m.shipId === 'S')!;
+    expect(s.cbAfter).toBeGreaterThanOrEqual(0);
+  });
+  it('throws when pool sum < 0', () => {
+    expect(() => allocatePool([
+      { shipId: 'A', cb: 50 },
+      { shipId: 'B', cb: -200 },
+    ])).toThrow();
+  });
+});
+
+───────────────────────────
+__tests__/application/RouteUseCases.test.ts
+───────────────────────────
+
+Mock IRouteRepository with jest.fn(). 
+
+Test:
+- getAllRoutes() with vesselType filter calls findAll with correct filters
+- setBaseline() calls findByRouteId then setBaseline on repo
+- setBaseline() throws 'not found' if repo returns null
+- getComparison() throws if no baseline set
+- getComparison() returns correct RouteComparison[] with percentDiff and compliant fields
+
+───────────────────────────
+__tests__/application/BankingUseCases.test.ts
+───────────────────────────
+
+Mock all three repos with jest.fn().
+
+Test:
+- bankSurplus() calls bankingRepo.save with type='banked'
+- bankSurplus() throws if amount > cb
+- applyBanked() calls bankingRepo.save with type='applied'
+- applyBanked() throws if amount > availableBanked (totalBanked - totalApplied)
+
+───────────────────────────
+__tests__/integration/routes.integration.test.ts
+───────────────────────────
+
+Use supertest. Import app from infrastructure/server/index.ts.
+Mark this file with @group integration.
+
+Test (requires DB to be running):
+- GET /routes returns status 200 and array of 5 routes
+- GET /routes?vesselType=Container returns only Container routes
+- GET /routes/comparison returns { baseline, comparisons } structure with R004 as baseline
+- POST /routes/R001/baseline returns 200 and sets R001 as baseline
+- GET /compliance/cb?shipId=R001&year=2024 returns { cb, energyMj }
+- POST /banking/bank with { shipId: 'R002', year: 2024, amount: 100 } returns { cbBefore, banked, cbAfter }
+- POST /banking/bank with deficit ship returns 400
+- POST /pools with valid members returns 201 with cb_after per member
+- POST /pools with invalid sum (< 0) returns 400
 ```
 

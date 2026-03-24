@@ -40,8 +40,11 @@ app.use('/pools', createPoolsRouter(poolService));
 app.get('/health', (_req, res) => res.json({ status: 'ok' }));
 
 const PORT = Number(process.env.PORT) || 3001;
-app.listen(PORT, () => {
-  console.log(`FuelEU backend running on port ${PORT}`);
-});
+
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`FuelEU backend running on port ${PORT}`);
+  });
+}
 
 export default app;
