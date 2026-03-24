@@ -98,8 +98,8 @@ describe('PoolingTab', () => {
       expect(screen.getByText(/pool-abc-123/)).toBeInTheDocument();
     });
 
-    expect(screen.getByText('150')).toBeInTheDocument();
-    expect(screen.getByText('0')).toBeInTheDocument();
+    expect(screen.getAllByText('150').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('0').length).toBeGreaterThanOrEqual(1);
   });
 
   it('createPool API error: shows ErrorBanner', async () => {

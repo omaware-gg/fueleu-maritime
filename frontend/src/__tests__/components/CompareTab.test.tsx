@@ -79,7 +79,8 @@ describe('CompareTab', () => {
   it('baseline card shows ghgIntensity 89.2000', async () => {
     render(<CompareTab />);
     await waitFor(() => {
-      expect(screen.getByText('89.2000')).toBeInTheDocument();
+      const matches = screen.getAllByText('89.2000');
+      expect(matches.length).toBeGreaterThanOrEqual(1);
     });
   });
 

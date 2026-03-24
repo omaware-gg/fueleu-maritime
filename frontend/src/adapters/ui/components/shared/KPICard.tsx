@@ -5,11 +5,18 @@ interface KPICardProps {
   variant?: 'default' | 'success' | 'danger' | 'warning';
 }
 
-const variantStyles: Record<string, string> = {
-  default: 'border-gray-200 text-gray-900',
-  success: 'border-green-400 text-green-700',
-  danger: 'border-red-400 text-red-700',
-  warning: 'border-amber-400 text-amber-700',
+const variantAccent: Record<string, string> = {
+  default: 'text-slate-900',
+  success: 'text-emerald-600',
+  danger: 'text-rose-600',
+  warning: 'text-amber-600',
+};
+
+const variantDot: Record<string, string> = {
+  default: 'bg-slate-300',
+  success: 'bg-emerald-400',
+  danger: 'bg-rose-400',
+  warning: 'bg-amber-400',
 };
 
 export default function KPICard({
@@ -18,14 +25,18 @@ export default function KPICard({
   unit,
   variant = 'default',
 }: KPICardProps): JSX.Element {
-  const styles = variantStyles[variant] ?? variantStyles.default;
+  const accent = variantAccent[variant] ?? variantAccent.default;
+  const dot = variantDot[variant] ?? variantDot.default;
 
   return (
-    <div className={`rounded-lg border-2 bg-white p-4 ${styles}`}>
-      <p className="text-sm font-medium text-gray-500">{label}</p>
-      <p className="mt-1 text-2xl font-bold">
+    <div className="glass-subtle p-4">
+      <div className="flex items-center gap-2">
+        <span className={`h-1.5 w-1.5 rounded-full ${dot}`} />
+        <p className="text-xs font-medium uppercase tracking-wider text-slate-400">{label}</p>
+      </div>
+      <p className={`mt-2 text-2xl font-semibold tracking-tight ${accent}`}>
         {value}
-        {unit && <span className="ml-1 text-sm font-normal">{unit}</span>}
+        {unit && <span className="ml-1 text-xs font-normal text-slate-400">{unit}</span>}
       </p>
     </div>
   );

@@ -43,20 +43,26 @@ function BankingContent({ shipId, year }: { shipId: string; year: number }): JSX
 
   const handleBank = async () => {
     setBankPending(true);
-    await bankSurplus(Number(bankAmount));
-    setBankPending(false);
+    try {
+      await bankSurplus(Number(bankAmount));
+    } finally {
+      setBankPending(false);
+    }
   };
 
   const handleApply = async () => {
     setApplyPending(true);
-    await applyBanked(Number(applyAmount));
-    setApplyPending(false);
+    try {
+      await applyBanked(Number(applyAmount));
+    } finally {
+      setApplyPending(false);
+    }
   };
 
   if (loading && cb === null) return <LoadingSpinner />;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-fade-in">
       {error && <ErrorBanner message={error} />}
 
       {cb !== null && energyMj !== null && (
@@ -72,48 +78,53 @@ function BankingContent({ shipId, year }: { shipId: string; year: number }): JSX
             <KPICard label="Energy in Scope" value={formatMj(energyMj)} unit="MJ" />
             <KPICard
               label="Status"
-              value={cb > 0 ? 'Surplus' : 'Deficit'}
-              variant={cb > 0 ? 'success' : 'danger'}
+              value={cb > 0 ? 'Surplus' : cb === 0 ? 'Balanced' : 'Deficit'}
+              variant={cb > 0 ? 'success' : cb === 0 ? 'default' : 'danger'}
             />
           </div>
 
-          {/* Bank Surplus — Article 20.1 */}
-          <div className="rounded-lg border border-gray-200 bg-white p-5">
-            <h3 className="text-sm font-semibold text-gray-900">Bank Surplus</h3>
-            <p className="mb-3 text-xs text-gray-500">Article 20.1 — Set aside surplus for future use</p>
+          {/* Bank Surplus */}
+          <div className="glass p-5">
+            <h3 className="text-sm font-semibold text-slate-800">Bank Surplus</h3>
+            <p className="mb-4 text-xs text-slate-400">
+              Article 20.1 — Set aside surplus for future use
+            </p>
             <div className="flex items-end gap-3">
-              <div>
-                <label className="block text-xs font-medium text-gray-600">Amount (tCO₂e)</label>
+              <div className="flex-1 max-w-[200px]">
+                <label htmlFor="bank-amount" className="mb-1 block text-xs font-medium text-slate-500">
+                  Amount (tCO₂e)
+                </label>
                 <input
+                  id="bank-amount"
                   type="number"
                   value={bankAmount}
                   onChange={(e) => setBankAmount(e.target.value)}
-                  className="mt-1 w-44 rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  className="glass-input w-full"
                 />
               </div>
-              <div className="relative">
+              <div>
                 <button
                   onClick={handleBank}
                   disabled={cb <= 0 || !bankAmount || Number(bankAmount) <= 0 || bankPending}
-                  className="inline-flex items-center rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="btn-primary"
                 >
                   {bankPending ? (
-                    <>
-                      <span className="mr-1.5 inline-block h-3 w-3 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                    <span className="inline-flex items-center gap-1.5">
+                      <span className="h-3 w-3 animate-spin rounded-full border-2 border-white/40 border-t-white" />
                       Banking…
-                    </>
+                    </span>
                   ) : (
                     'Bank Surplus'
                   )}
                 </button>
                 {cb <= 0 && (
-                  <p className="mt-1 text-xs text-amber-600">CB must be positive to bank</p>
+                  <p className="mt-1 text-xs text-amber-500">CB must be positive to bank</p>
                 )}
               </div>
             </div>
 
             {actionResult?.banked !== undefined && (
-              <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
                 <KPICard label="CB Before" value={formatCb(actionResult.cbBefore)} unit="tCO₂e" />
                 <KPICard
                   label="Banked"
@@ -126,43 +137,46 @@ function BankingContent({ shipId, year }: { shipId: string; year: number }): JSX
             )}
           </div>
 
-          {/* Apply Banked Surplus — Article 20.2 */}
-          <div className="rounded-lg border border-gray-200 bg-white p-5">
-            <h3 className="text-sm font-semibold text-gray-900">Apply Banked Surplus</h3>
-            <p className="mb-3 text-xs text-gray-500">
+          {/* Apply Banked Surplus */}
+          <div className="glass p-5">
+            <h3 className="text-sm font-semibold text-slate-800">Apply Banked Surplus</h3>
+            <p className="mb-4 text-xs text-slate-400">
               Article 20.2 — Use banked surplus to offset a deficit
             </p>
             <div className="flex items-end gap-3">
-              <div>
-                <label className="block text-xs font-medium text-gray-600">Amount (tCO₂e)</label>
+              <div className="flex-1 max-w-[200px]">
+                <label htmlFor="apply-amount" className="mb-1 block text-xs font-medium text-slate-500">
+                  Amount (tCO₂e)
+                </label>
                 <input
+                  id="apply-amount"
                   type="number"
                   value={applyAmount}
                   onChange={(e) => setApplyAmount(e.target.value)}
-                  className="mt-1 w-44 rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  className="glass-input w-full"
                 />
               </div>
               <button
                 onClick={handleApply}
                 disabled={availableBanked <= 0 || !applyAmount || Number(applyAmount) <= 0 || applyPending}
-                className="inline-flex items-center rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                className="btn-primary"
               >
                 {applyPending ? (
-                  <>
-                    <span className="mr-1.5 inline-block h-3 w-3 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                  <span className="inline-flex items-center gap-1.5">
+                    <span className="h-3 w-3 animate-spin rounded-full border-2 border-white/40 border-t-white" />
                     Applying…
-                  </>
+                  </span>
                 ) : (
                   'Apply to Deficit'
                 )}
               </button>
             </div>
-            <p className="mt-2 text-xs text-gray-500">
-              Available banked: {formatCb(availableBanked)} tCO₂e
+            <p className="mt-2 text-xs text-slate-400">
+              Available banked: <span className="font-medium text-slate-600">{formatCb(availableBanked)} tCO₂e</span>
             </p>
 
             {actionResult?.applied !== undefined && (
-              <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
                 <KPICard label="CB Before" value={formatCb(actionResult.cbBefore)} unit="tCO₂e" />
                 <KPICard
                   label="Applied"
@@ -187,16 +201,24 @@ export default function BankingTab(): JSX.Element {
 
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div>
-        <h2 className="text-lg font-semibold text-gray-900">Banking</h2>
-        <p className="text-sm text-gray-500">FuelEU Article 20 — Banking</p>
+        <h2 className="text-lg font-semibold tracking-tight text-slate-900">Banking</h2>
+        <p className="mt-0.5 text-sm text-slate-400">FuelEU Article 20 — Banking</p>
       </div>
 
       {/* Ship selector */}
-      <div className="flex flex-wrap items-end gap-4">
+      <form
+        className="glass inline-flex items-end gap-4 p-4"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (shipId) setLoaded(true);
+        }}
+      >
         <div>
-          <label className="block text-xs font-medium text-gray-600">Ship ID</label>
+          <label htmlFor="banking-ship" className="mb-1 block text-xs font-medium text-slate-500">Ship ID</label>
           <input
+            id="banking-ship"
             type="text"
             value={shipId}
             onChange={(e) => {
@@ -204,29 +226,30 @@ export default function BankingTab(): JSX.Element {
               setLoaded(false);
             }}
             placeholder="e.g. R002"
-            className="mt-1 w-36 rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            className="glass-input w-36"
           />
         </div>
         <div>
-          <label className="block text-xs font-medium text-gray-600">Year</label>
+          <label htmlFor="banking-year" className="mb-1 block text-xs font-medium text-slate-500">Year</label>
           <input
+            id="banking-year"
             type="number"
             value={year}
             onChange={(e) => {
               setYear(Number(e.target.value));
               setLoaded(false);
             }}
-            className="mt-1 w-28 rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            className="glass-input w-24"
           />
         </div>
         <button
-          onClick={() => setLoaded(true)}
+          type="submit"
           disabled={!shipId}
-          className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+          className="btn-primary"
         >
           Load
         </button>
-      </div>
+      </form>
 
       {loaded && <BankingContent shipId={shipId} year={year} />}
     </div>

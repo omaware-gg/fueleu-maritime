@@ -43,99 +43,106 @@ export default function PoolingTab(): JSX.Element {
     return member?.cbAfter ?? null;
   };
 
-  const inputClass =
-    'rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500';
-
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div>
-        <h2 className="text-lg font-semibold text-gray-900">Pooling</h2>
-        <p className="text-sm text-gray-500">FuelEU Article 21 — Pooling</p>
+        <h2 className="text-lg font-semibold tracking-tight text-slate-900">Pooling</h2>
+        <p className="mt-0.5 text-sm text-slate-400">FuelEU Article 21 — Pooling</p>
       </div>
 
       {/* Year selector */}
       <div>
-        <label className="block text-xs font-medium text-gray-600">Pool Year</label>
+        <label htmlFor="pool-year" className="mb-1 block text-xs font-medium text-slate-500">Pool Year</label>
         <input
+          id="pool-year"
           type="number"
           value={year}
           onChange={(e) => setYear(Number(e.target.value))}
           disabled={poolCreated}
-          className={`mt-1 w-28 ${inputClass} disabled:bg-gray-100`}
+          className="glass-input w-28"
         />
       </div>
 
       {/* Add member form */}
-      <div className="flex flex-wrap items-end gap-3">
+      <form
+        className="glass inline-flex flex-wrap items-end gap-3 p-4"
+        onSubmit={(e) => {
+          e.preventDefault();
+          handleAdd();
+        }}
+      >
         <div>
-          <label className="block text-xs font-medium text-gray-600">Ship ID</label>
+          <label htmlFor="pool-ship" className="mb-1 block text-xs font-medium text-slate-500">Ship ID</label>
           <input
+            id="pool-ship"
             type="text"
             value={shipInput}
             onChange={(e) => setShipInput(e.target.value)}
             placeholder="e.g. S1"
             disabled={poolCreated}
-            className={`mt-1 w-32 ${inputClass} disabled:bg-gray-100`}
+            className="glass-input w-32"
           />
         </div>
         <div>
-          <label className="block text-xs font-medium text-gray-600">CB Value (tCO₂e)</label>
+          <label htmlFor="pool-cb" className="mb-1 block text-xs font-medium text-slate-500">CB Value (tCO₂e)</label>
           <input
+            id="pool-cb"
             type="number"
             value={cbInput}
             onChange={(e) => setCbInput(e.target.value)}
             placeholder="e.g. -100"
             disabled={poolCreated}
-            className={`mt-1 w-36 ${inputClass} disabled:bg-gray-100`}
+            className="glass-input w-36"
           />
         </div>
         <button
-          onClick={handleAdd}
+          type="submit"
           disabled={poolCreated || !shipInput.trim() || isNaN(Number(cbInput))}
-          className="rounded-md bg-gray-700 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
+          className="btn-primary"
         >
           Add Member
         </button>
-      </div>
+      </form>
 
       {/* Members table */}
       {members.length > 0 && (
-        <div className="overflow-x-auto rounded-lg border border-gray-200">
-          <table className="min-w-full divide-y divide-gray-200 text-sm">
-            <thead className="bg-gray-50">
-              <tr>
+        <div className="glass overflow-x-auto animate-fade-in">
+          <table className="min-w-full text-sm">
+            <thead>
+              <tr className="border-b border-slate-200/60">
                 {['Ship ID', 'CB Before', 'CB After', 'Action'].map((h) => (
                   <th
                     key={h}
-                    className="whitespace-nowrap px-4 py-3 text-left font-medium text-gray-600"
+                    className="whitespace-nowrap px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-400"
                   >
                     {h}
                   </th>
                 ))}
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
-              {members.map((m, idx) => {
+            <tbody className="divide-y divide-slate-100/60">
+              {members.map((m) => {
                 const cbAfter = getCbAfter(m.shipId);
                 return (
-                  <tr key={m.shipId} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                    <td className="whitespace-nowrap px-4 py-3 font-medium text-gray-900">
+                  <tr key={m.shipId} className="transition-colors hover:bg-white/40">
+                    <td className="whitespace-nowrap px-4 py-3 font-medium text-slate-900">
                       {m.shipId}
                     </td>
                     <td
-                      className={`whitespace-nowrap px-4 py-3 font-medium ${
-                        m.cb >= 0 ? 'text-green-600' : 'text-red-600'
+                      className={`whitespace-nowrap px-4 py-3 font-mono font-medium ${
+                        m.cb >= 0 ? 'text-emerald-600' : 'text-rose-600'
                       }`}
                     >
                       {m.cb.toLocaleString(undefined, { maximumFractionDigits: 2 })}
                     </td>
                     <td
-                      className={`whitespace-nowrap px-4 py-3 font-medium ${
+                      className={`whitespace-nowrap px-4 py-3 font-mono font-medium ${
                         cbAfter === null
-                          ? 'text-gray-400'
+                          ? 'text-slate-300'
                           : cbAfter >= 0
-                            ? 'text-green-600'
-                            : 'text-red-600'
+                            ? 'text-emerald-600'
+                            : 'text-rose-600'
                       }`}
                     >
                       {cbAfter === null
@@ -146,7 +153,7 @@ export default function PoolingTab(): JSX.Element {
                       <button
                         onClick={() => removeMember(m.shipId)}
                         disabled={poolCreated}
-                        className="text-sm text-red-600 hover:text-red-800 disabled:cursor-not-allowed disabled:opacity-40"
+                        className="text-xs text-rose-500 transition-colors hover:text-rose-700 disabled:cursor-not-allowed disabled:opacity-30"
                       >
                         Remove
                       </button>
@@ -162,16 +169,20 @@ export default function PoolingTab(): JSX.Element {
       {/* Pool summary bar */}
       {members.length > 0 && (
         <div
-          className={`flex items-center justify-between rounded-lg border p-4 ${
+          className={`flex items-center justify-between rounded-xl border px-4 py-3 backdrop-blur-sm transition-colors ${
             poolSum >= 0
-              ? 'border-green-200 bg-green-50 text-green-800'
-              : 'border-red-200 bg-red-50 text-red-800'
+              ? 'border-emerald-200/60 bg-emerald-50/50 text-emerald-700'
+              : 'border-rose-200/60 bg-rose-50/50 text-rose-700'
           }`}
         >
-          <span className="font-medium">
-            Pool Sum CB: {poolSum.toLocaleString(undefined, { maximumFractionDigits: 2 })} tCO₂e
+          <span className="text-sm font-medium">
+            Pool Sum CB:{' '}
+            <span className="font-mono">
+              {poolSum.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+            </span>{' '}
+            tCO₂e
           </span>
-          <span className="text-sm">
+          <span className="text-xs">
             {poolSum >= 0 && members.length >= 2
               ? '✓ Valid pool'
               : `✗ Invalid — ${reason}`}
@@ -184,11 +195,11 @@ export default function PoolingTab(): JSX.Element {
         <button
           onClick={() => createPool(year)}
           disabled={!isValid || loading || poolCreated}
-          className="w-full rounded-md bg-blue-600 px-6 py-2.5 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+          className="btn-primary px-6 py-2.5"
         >
           {loading ? (
-            <span className="inline-flex items-center">
-              <span className="mr-1.5 inline-block h-3 w-3 animate-spin rounded-full border-2 border-white border-t-transparent" />
+            <span className="inline-flex items-center gap-1.5">
+              <span className="h-3 w-3 animate-spin rounded-full border-2 border-white/40 border-t-white" />
               Creating…
             </span>
           ) : (
@@ -196,14 +207,15 @@ export default function PoolingTab(): JSX.Element {
           )}
         </button>
         {!isValid && !poolCreated && reason && (
-          <p className="mt-1 text-xs text-amber-600">{reason}</p>
+          <p className="mt-1.5 text-xs text-amber-500">{reason}</p>
         )}
       </div>
 
       {/* Success banner */}
       {poolCreated && (
-        <div className="rounded-lg border border-green-200 bg-green-50 p-4 text-green-800">
-          Pool created · ID: <span className="font-mono font-medium">{poolResult.id}</span>
+        <div className="animate-slide-up rounded-xl border border-emerald-200/60 bg-emerald-50/50 px-4 py-3 text-sm text-emerald-700 backdrop-blur-sm">
+          <span className="mr-1">✓</span> Pool created · ID:{' '}
+          <span className="font-mono font-medium">{poolResult.id}</span>
         </div>
       )}
 

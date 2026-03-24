@@ -28,74 +28,91 @@ export default function CompareTab(): JSX.Element {
     ...comparisons.map((c) => ({ name: c.comparisonRouteId, ghg: c.comparisonGhg })),
   ];
 
+  const allGhg = chartData.map((d) => d.ghg).concat(TARGET_GHG_INTENSITY);
+  const chartMin = Math.floor(Math.min(...allGhg) - 2);
+  const chartMax = Math.ceil(Math.max(...allGhg) + 2);
+
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div>
-        <h2 className="text-lg font-semibold text-gray-900">Compare</h2>
-        <p className="text-sm text-gray-500">Route GHG intensity comparison against baseline</p>
+        <h2 className="text-lg font-semibold tracking-tight text-slate-900">Compare</h2>
+        <p className="mt-0.5 text-sm text-slate-400">
+          Route GHG intensity comparison against baseline
+        </p>
       </div>
 
       {/* Baseline info card */}
-      <div className="rounded-lg border-2 border-blue-400 bg-white p-5">
-        <p className="text-sm font-medium text-blue-600">Baseline Route</p>
-        <div className="mt-2 grid grid-cols-2 gap-x-8 gap-y-2 text-sm sm:grid-cols-4">
-          <div>
-            <span className="text-gray-500">Route ID: </span>
-            <span className="font-medium text-gray-900">{baseline.routeId}</span>
-          </div>
-          <div>
-            <span className="text-gray-500">Vessel: </span>
-            <span className="font-medium text-gray-900">{baseline.vesselType}</span>
-          </div>
-          <div>
-            <span className="text-gray-500">Fuel: </span>
-            <span className="font-medium text-gray-900">{baseline.fuelType}</span>
-          </div>
-          <div>
-            <span className="text-gray-500">Year: </span>
-            <span className="font-medium text-gray-900">{baseline.year}</span>
-          </div>
+      <div className="glass p-5">
+        <div className="flex items-center gap-2">
+          <span className="h-2 w-2 rounded-full bg-blue-500" />
+          <p className="text-xs font-semibold uppercase tracking-wider text-blue-600">
+            Baseline Route
+          </p>
         </div>
-        <div className="mt-3 flex flex-wrap items-center gap-6 text-sm">
+        <div className="mt-3 grid grid-cols-2 gap-x-8 gap-y-2 text-sm sm:grid-cols-4">
+          {[
+            ['Route ID', baseline.routeId],
+            ['Vessel', baseline.vesselType],
+            ['Fuel', baseline.fuelType],
+            ['Year', baseline.year],
+          ].map(([lbl, val]) => (
+            <div key={String(lbl)}>
+              <span className="text-slate-400">{lbl}: </span>
+              <span className="font-medium text-slate-800">{val}</span>
+            </div>
+          ))}
+        </div>
+        <div className="mt-3 flex flex-wrap items-center gap-6 border-t border-slate-200/50 pt-3 text-sm">
           <div>
-            <span className="text-gray-500">GHG Intensity: </span>
-            <span className="font-semibold text-gray-900">
-              {baseline.ghgIntensity.toFixed(4)} gCO₂e/MJ
+            <span className="text-slate-400">GHG Intensity: </span>
+            <span className="font-mono font-semibold text-slate-900">
+              {baseline.ghgIntensity.toFixed(4)}
             </span>
+            <span className="ml-0.5 text-slate-400">gCO₂e/MJ</span>
           </div>
           <div>
-            <span className="text-gray-500">Target: </span>
-            <span className="font-semibold text-gray-900">{TARGET_GHG_INTENSITY} gCO₂e/MJ</span>
+            <span className="text-slate-400">Target: </span>
+            <span className="font-mono font-semibold text-slate-900">{TARGET_GHG_INTENSITY}</span>
+            <span className="ml-0.5 text-slate-400">gCO₂e/MJ</span>
           </div>
-          <div>
-            <span className="text-gray-500">Status: </span>
-            <Badge compliant={baselineCompliant} />
-          </div>
+          <Badge compliant={baselineCompliant} />
         </div>
       </div>
 
       {/* Bar chart */}
-      <div className="rounded-lg border border-gray-200 bg-white p-4">
+      <div className="glass p-5">
         <ResponsiveContainer width="100%" height={300}>
           <BarChart data={chartData} margin={{ top: 10, right: 20, left: 10, bottom: 5 }}>
-            <XAxis dataKey="name" tick={{ fontSize: 12 }} />
+            <XAxis dataKey="name" tick={{ fontSize: 12, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
             <YAxis
-              domain={[85, 96]}
-              tick={{ fontSize: 12 }}
-              label={{ value: 'gCO₂e/MJ', angle: -90, position: 'insideLeft', fontSize: 12 }}
+              domain={[chartMin, chartMax]}
+              tick={{ fontSize: 12, fill: '#94a3b8' }}
+              axisLine={false}
+              tickLine={false}
+              label={{ value: 'gCO₂e/MJ', angle: -90, position: 'insideLeft', fontSize: 11, fill: '#94a3b8' }}
             />
             <Tooltip
+              contentStyle={{
+                background: 'rgba(255,255,255,0.8)',
+                backdropFilter: 'blur(12px)',
+                border: '1px solid rgba(226,232,240,0.6)',
+                borderRadius: '12px',
+                boxShadow: '0 4px 12px rgba(0,0,0,0.05)',
+                fontSize: 12,
+              }}
               formatter={(value: number) => [`${value} gCO₂e/MJ`, 'GHG Intensity']}
             />
             <ReferenceLine
               y={TARGET_GHG_INTENSITY}
-              stroke="#EF4444"
-              strokeDasharray="4 4"
-              label={{ value: 'Target 89.34', fill: '#EF4444', fontSize: 12 }}
+              stroke="#f43f5e"
+              strokeDasharray="6 4"
+              strokeWidth={1.5}
+              label={{ value: `Target ${TARGET_GHG_INTENSITY}`, fill: '#f43f5e', fontSize: 11 }}
             />
-            <Bar dataKey="ghg" radius={[4, 4, 0, 0]}>
+            <Bar dataKey="ghg" radius={[6, 6, 0, 0]}>
               {chartData.map((entry, idx) => (
-                <Cell key={entry.name} fill={idx === 0 ? '#3B82F6' : '#14B8A6'} />
+                <Cell key={entry.name} fill={idx === 0 ? '#6366f1' : '#14b8a6'} opacity={0.85} />
               ))}
             </Bar>
           </BarChart>
@@ -103,56 +120,55 @@ export default function CompareTab(): JSX.Element {
       </div>
 
       {/* Comparison table */}
-      <div className="overflow-x-auto rounded-lg border border-gray-200">
-        <table className="min-w-full divide-y divide-gray-200 text-sm">
-          <thead className="bg-gray-50">
-            <tr>
+      <div className="glass overflow-x-auto">
+        <table className="min-w-full text-sm">
+          <thead>
+            <tr className="border-b border-slate-200/60">
               {['Route ID', 'GHG Intensity', 'vs Baseline (%)', 'Compliant'].map((h) => (
                 <th
                   key={h}
-                  className="whitespace-nowrap px-4 py-3 text-left font-medium text-gray-600"
+                  className="whitespace-nowrap px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-400"
                 >
                   {h}
                 </th>
               ))}
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100">
+          <tbody className="divide-y divide-slate-100/60">
             {/* Baseline row */}
-            <tr className="bg-blue-50">
-              <td className="whitespace-nowrap px-4 py-3 font-medium text-gray-900">
+            <tr className="bg-blue-50/30">
+              <td className="whitespace-nowrap px-4 py-3 font-medium text-slate-900">
                 {baseline.routeId}
-                <span className="ml-2 inline-flex rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800">
+                <span className="ml-2 inline-flex items-center rounded-md bg-blue-100/60 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-blue-700">
                   Baseline
                 </span>
               </td>
-              <td className="whitespace-nowrap px-4 py-3 text-gray-700">
+              <td className="whitespace-nowrap px-4 py-3 font-mono text-slate-600">
                 {baseline.ghgIntensity.toFixed(4)}
               </td>
-              <td className="whitespace-nowrap px-4 py-3 text-gray-400">—</td>
+              <td className="whitespace-nowrap px-4 py-3 text-slate-300">—</td>
               <td className="whitespace-nowrap px-4 py-3">
                 <Badge compliant={baselineCompliant} />
               </td>
             </tr>
 
             {/* Comparison rows */}
-            {comparisons.map((c, idx) => {
+            {comparisons.map((c) => {
               const positive = c.percentDiff > 0;
               return (
-                <tr key={c.comparisonRouteId} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                  <td className="whitespace-nowrap px-4 py-3 font-medium text-gray-900">
+                <tr key={c.comparisonRouteId} className="transition-colors hover:bg-white/40">
+                  <td className="whitespace-nowrap px-4 py-3 font-medium text-slate-900">
                     {c.comparisonRouteId}
                   </td>
-                  <td className="whitespace-nowrap px-4 py-3 text-gray-700">
+                  <td className="whitespace-nowrap px-4 py-3 font-mono text-slate-600">
                     {c.comparisonGhg.toFixed(4)}
                   </td>
                   <td
-                    className={`whitespace-nowrap px-4 py-3 font-medium ${
-                      positive ? 'text-red-600' : 'text-green-600'
+                    className={`whitespace-nowrap px-4 py-3 font-mono font-medium ${
+                      positive ? 'text-rose-600' : 'text-emerald-600'
                     }`}
                   >
-                    {positive ? '+' : ''}
-                    {c.percentDiff.toFixed(2)}%
+                    {`${positive ? '+' : ''}${c.percentDiff.toFixed(2)}%`}
                   </td>
                   <td className="whitespace-nowrap px-4 py-3">
                     <Badge compliant={c.compliant} />

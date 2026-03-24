@@ -1980,3 +1980,117 @@ IMPORTANT: Import validatePool from @core/domain — reuse the same pure functio
   in real-time as members are added/removed.
 ```
 
+### PROMPT 8 - Frontend: Tests
+
+```Write Vitest + React Testing Library tests in /frontend/src/__tests__/.
+Mock the API adapters using vi.mock() or by passing mock port implementations.
+
+───────────────────────────
+__tests__/domain/Compliance.test.ts  (no React)
+───────────────────────────
+
+import { TARGET_GHG_INTENSITY } from '@shared/constants';
+
+describe('TARGET_GHG_INTENSITY constant', () => {
+  it('is 89.3368', () => expect(TARGET_GHG_INTENSITY).toBe(89.3368));
+});
+
+───────────────────────────
+__tests__/domain/Pool.test.ts  (no React — reuse logic from backend)
+───────────────────────────
+
+Since validatePool and allocatePool are also used in the frontend (imported in PoolingTab),
+test them here too to ensure the frontend bundle includes correct logic:
+
+import { validatePool } from '@core/domain' — wait, these are only in backend.
+
+INSTEAD: Import from the frontend's own constants/helpers if they exist, or 
+write simple unit tests for the UI helper functions (formatPercent, formatCB, etc.)
+
+───────────────────────────
+__tests__/components/RoutesTab.test.tsx
+───────────────────────────
+
+Create a mock IRoutePort:
+const mockRoutePort = {
+  getRoutes: vi.fn().mockResolvedValue([
+    { id: '1', routeId: 'R001', vesselType: 'Container', fuelType: 'HFO',
+      year: 2024, ghgIntensity: 91.0, fuelConsumption: 5000,
+      distanceKm: 12000, totalEmissions: 4500, isBaseline: false },
+    { id: '2', routeId: 'R004', vesselType: 'RoRo', fuelType: 'HFO',
+      year: 2025, ghgIntensity: 89.2, fuelConsumption: 4900,
+      distanceKm: 11800, totalEmissions: 4300, isBaseline: true },
+  ]),
+  setBaseline: vi.fn().mockResolvedValue(undefined),
+  getComparison: vi.fn(),
+};
+
+Wrap render in a mock ApiProvider that provides mockRoutePort.
+
+Tests:
+- Table renders route rows (find 'R001', 'R004' in the document)
+- Baseline row (R004) shows "✓ Baseline" and no "Set Baseline" button
+- Non-baseline row shows "Set Baseline" button
+- Clicking "Set Baseline" calls mockRoutePort.setBaseline with correct routeId
+- Filter dropdown change calls getRoutes with filter params
+
+───────────────────────────
+__tests__/components/CompareTab.test.tsx
+───────────────────────────
+
+Mock getComparison to return:
+  baseline: R004 (ghgIntensity: 89.2)
+  comparisons: [
+    { comparisonRouteId: 'R001', comparisonGhg: 91.0, percentDiff: 1.988, compliant: false },
+    { comparisonRouteId: 'R002', comparisonGhg: 88.0, percentDiff: -1.344, compliant: true },
+  ]
+
+Tests:
+- R001 shows ❌ (non-compliant badge)
+- R002 shows ✅ (compliant badge)  
+- R004 baseline card shows ghgIntensity 89.2
+- percentDiff for R001 is formatted starting with '+'
+
+───────────────────────────
+__tests__/components/BankingTab.test.tsx
+───────────────────────────
+
+Mock getCB to return { cb: -340240000, energyMj: 205000000 } for R001 (deficit).
+Mock getCB to return { cb: 57360000, energyMj: 196800000 } for R002 (surplus).
+
+Tests:
+- Load R001 (deficit): "Bank Surplus" button is disabled
+- Load R002 (surplus): "Bank Surplus" button is enabled
+- Available banked = 0: "Apply to Deficit" button is disabled
+- bankSurplus() success: shows cbBefore, banked, cbAfter cards
+
+───────────────────────────
+__tests__/components/PoolingTab.test.tsx
+───────────────────────────
+
+Tests:
+- "Create Pool" button disabled when no members
+- Add one member: button still disabled (need >= 2)
+- Add R002 (cb: 57360000) + R003 (cb: -168850000): poolSum negative → button disabled
+- Add R002 (cb: 200) + R004 (cb: -50): poolSum positive → button enabled
+- createPool() success: fills CB After column, shows success banner
+- createPool() API error: shows ErrorBanner
+```
+
+### PROMPT 9 - UI Cleanup and Glassmorphism
+
+```Analyze everything for any UI/UX issues.
+List the issues briefly.
+Then rewrite to look clean, minimal, and modern, and Convert the overall UI into a clean Glassmorphism interface.
+
+Use:
+- backdrop blur
+- translucent cards
+- subtle borders
+- soft shadows
+- minimal colors
+- generous spacing
+
+Make it look like a modern macOS / Vercel style UI.
+```
+
