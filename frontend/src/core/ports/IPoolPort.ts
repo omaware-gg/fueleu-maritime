@@ -1,1 +1,1 @@
-export {};
+export type { IPoolPort } from './ICompliancePort';
