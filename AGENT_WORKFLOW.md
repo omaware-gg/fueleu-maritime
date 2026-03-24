@@ -1337,3 +1337,646 @@ Test (requires DB to be running):
 - POST /pools with invalid sum (< 0) returns 400
 ```
 
+### PROMPT 6.1 - Frontend: Core domain types and ports
+
+```Implement the frontend core layer in /frontend/src/core/.
+CRITICAL RULE: Zero React imports in this folder. Pure TypeScript interfaces and functions only.
+
+───────────────────────────
+/core/domain/Route.ts
+───────────────────────────
+
+export interface Route {
+  id: string;
+  routeId: string;
+  vesselType: string;
+  fuelType: string;
+  year: number;
+  ghgIntensity: number;
+  fuelConsumption: number;
+  distanceKm: number;
+  totalEmissions: number;
+  isBaseline: boolean;
+}
+
+export interface RouteFilters {
+  vesselType?: string;
+  fuelType?: string;
+  year?: number;
+}
+
+───────────────────────────
+/core/domain/Compliance.ts
+───────────────────────────
+
+export interface ComplianceBalance {
+  shipId: string;
+  year: number;
+  cb: number;
+  energyMj: number;
+}
+
+export interface BankEntry {
+  id: string;
+  shipId: string;
+  year: number;
+  amountGco2eq: number;
+  type: 'banked' | 'applied';
+  createdAt: string;
+}
+
+export interface BankingResult {
+  cbBefore: number;
+  banked?: number;
+  applied?: number;
+  cbAfter: number;
+}
+
+export interface PoolMember {
+  shipId: string;
+  cbBefore: number;
+  cbAfter: number;
+}
+
+export interface Pool {
+  id: string;
+  year: number;
+  members: PoolMember[];
+  createdAt: string;
+}
+
+───────────────────────────
+/core/domain/Comparison.ts
+───────────────────────────
+
+import { Route } from './Route';
+
+export interface RouteComparison {
+  baselineRouteId: string;
+  comparisonRouteId: string;
+  baselineGhg: number;
+  comparisonGhg: number;
+  percentDiff: number;
+  compliant: boolean;
+}
+
+export interface ComparisonResult {
+  baseline: Route;
+  comparisons: RouteComparison[];
+}
+
+───────────────────────────
+/core/ports/IRoutePort.ts
+───────────────────────────
+
+import { Route, RouteFilters } from '../domain/Route';
+import { ComparisonResult } from '../domain/Comparison';
+
+export interface IRoutePort {
+  getRoutes(filters?: RouteFilters): Promise<Route[]>;
+  setBaseline(routeId: string): Promise<void>;
+  getComparison(): Promise<ComparisonResult>;
+}
+
+───────────────────────────
+/core/ports/ICompliancePort.ts
+───────────────────────────
+
+import { BankEntry, BankingResult, Pool } from '../domain/Compliance';
+
+export interface ICompliancePort {
+  getCB(shipId: string, year: number): Promise<{ cb: number; energyMj: number }>;
+  getAdjustedCB(shipId: string, year: number): Promise<{ adjustedCb: number; rawCb: number }>;
+}
+
+export interface IBankingPort {
+  getRecords(shipId: string, year: number): Promise<BankEntry[]>;
+  bankSurplus(shipId: string, year: number, amount: number): Promise<BankingResult>;
+  applyBanked(shipId: string, year: number, amount: number): Promise<BankingResult>;
+}
+
+export interface IPoolPort {
+  createPool(year: number, members: { shipId: string; cb: number }[]): Promise<Pool>;
+}
+
+───────────────────────────
+/core/application/routeApplication.ts
+───────────────────────────
+
+// Pure application functions — no React, no hooks
+
+import { IRoutePort } from '../ports/IRoutePort';
+import { Route, RouteFilters } from '../domain/Route';
+import { ComparisonResult } from '../domain/Comparison';
+
+export async function getAllRoutes(port: IRoutePort, filters?: RouteFilters): Promise<Route[]> {
+  return port.getRoutes(filters);
+}
+
+export async function setBaseline(port: IRoutePort, routeId: string): Promise<void> {
+  return port.setBaseline(routeId);
+}
+
+export async function getComparison(port: IRoutePort): Promise<ComparisonResult> {
+  return port.getComparison();
+}
+
+───────────────────────────
+/core/application/bankingApplication.ts
+───────────────────────────
+
+import { IBankingPort } from '../ports/ICompliancePort';
+import { BankEntry, BankingResult } from '../domain/Compliance';
+
+export async function getRecords(port: IBankingPort, shipId: string, year: number): Promise<BankEntry[]> {
+  return port.getRecords(shipId, year);
+}
+
+export async function bankSurplus(port: IBankingPort, shipId: string, year: number, amount: number): Promise<BankingResult> {
+  return port.bankSurplus(shipId, year, amount);
+}
+
+export async function applyBanked(port: IBankingPort, shipId: string, year: number, amount: number): Promise<BankingResult> {
+  return port.applyBanked(shipId, year, amount);
+}
+
+───────────────────────────
+/core/application/poolApplication.ts
+───────────────────────────
+
+import { IPoolPort } from '../ports/ICompliancePort';
+import { Pool } from '../domain/Compliance';
+
+export async function createPool(
+  port: IPoolPort,
+  year: number,
+  members: { shipId: string; cb: number }[]
+): Promise<Pool> {
+  return port.createPool(year, members);
+}
+
+───────────────────────────
+/shared/constants.ts
+───────────────────────────
+
+export const TARGET_GHG_INTENSITY = 89.3368; // gCO₂e/MJ
+export const VESSEL_TYPES = ['All', 'Container', 'BulkCarrier', 'Tanker', 'RoRo'] as const;
+export const FUEL_TYPES = ['All', 'HFO', 'LNG', 'MGO'] as const;
+export const YEARS = ['All', 2024, 2025] as const;
+```
+
+### PROMPT 6.2 - Frontend: API client and React context
+
+```Implement the infrastructure adapter and React context in /frontend/src/adapters/.
+
+───────────────────────────
+/adapters/infrastructure/api/apiClient.ts
+───────────────────────────
+
+import axios from 'axios';
+import { IRoutePort } from '@core/ports/IRoutePort';
+import { ICompliancePort, IBankingPort, IPoolPort } from '@core/ports/ICompliancePort';
+import { Route, RouteFilters } from '@core/domain/Route';
+import { ComparisonResult } from '@core/domain/Comparison';
+import { BankEntry, BankingResult, Pool } from '@core/domain/Compliance';
+
+// Use /api prefix — proxied to backend by Vite
+const http = axios.create({
+  baseURL: import.meta.env.VITE_API_URL || '/api',
+  headers: { 'Content-Type': 'application/json' },
+});
+
+// Add response interceptor for error handling
+http.interceptors.response.use(
+  (r) => r,
+  (err) => {
+    const message = err.response?.data?.error || err.message || 'Unknown error';
+    return Promise.reject(new Error(message));
+  }
+);
+
+export class RouteApiAdapter implements IRoutePort {
+  async getRoutes(filters?: RouteFilters): Promise<Route[]> {
+    const params = Object.fromEntries(
+      Object.entries(filters ?? {}).filter(([, v]) => v !== undefined && v !== 'All')
+    );
+    const { data } = await http.get('/routes', { params });
+    return data;
+  }
+
+  async setBaseline(routeId: string): Promise<void> {
+    await http.post(`/routes/${routeId}/baseline`);
+  }
+
+  async getComparison(): Promise<ComparisonResult> {
+    const { data } = await http.get('/routes/comparison');
+    return data;
+  }
+}
+
+export class ComplianceApiAdapter implements ICompliancePort {
+  async getCB(shipId: string, year: number): Promise<{ cb: number; energyMj: number }> {
+    const { data } = await http.get('/compliance/cb', { params: { shipId, year } });
+    return data;
+  }
+
+  async getAdjustedCB(shipId: string, year: number): Promise<{ adjustedCb: number; rawCb: number }> {
+    const { data } = await http.get('/compliance/adjusted-cb', { params: { shipId, year } });
+    return data;
+  }
+}
+
+export class BankingApiAdapter implements IBankingPort {
+  async getRecords(shipId: string, year: number): Promise<BankEntry[]> {
+    const { data } = await http.get('/banking/records', { params: { shipId, year } });
+    return data;
+  }
+
+  async bankSurplus(shipId: string, year: number, amount: number): Promise<BankingResult> {
+    const { data } = await http.post('/banking/bank', { shipId, year, amount });
+    return data;
+  }
+
+  async applyBanked(shipId: string, year: number, amount: number): Promise<BankingResult> {
+    const { data } = await http.post('/banking/apply', { shipId, year, amount });
+    return data;
+  }
+}
+
+export class PoolApiAdapter implements IPoolPort {
+  async createPool(year: number, members: { shipId: string; cb: number }[]): Promise<Pool> {
+    const { data } = await http.post('/pools', { year, members });
+    return data;
+  }
+}
+
+───────────────────────────
+/adapters/infrastructure/api/ApiContext.tsx
+───────────────────────────
+
+import React, { createContext, useContext } from 'react';
+import { IRoutePort } from '@core/ports/IRoutePort';
+import { ICompliancePort, IBankingPort, IPoolPort } from '@core/ports/ICompliancePort';
+import {
+  RouteApiAdapter,
+  ComplianceApiAdapter,
+  BankingApiAdapter,
+  PoolApiAdapter,
+} from './apiClient';
+
+interface ApiContextValue {
+  routePort: IRoutePort;
+  compliancePort: ICompliancePort;
+  bankingPort: IBankingPort;
+  poolPort: IPoolPort;
+}
+
+const ApiContext = createContext<ApiContextValue | null>(null);
+
+const adapters: ApiContextValue = {
+  routePort: new RouteApiAdapter(),
+  compliancePort: new ComplianceApiAdapter(),
+  bankingPort: new BankingApiAdapter(),
+  poolPort: new PoolApiAdapter(),
+};
+
+export function ApiProvider({ children }: { children: React.ReactNode }): JSX.Element {
+  return <ApiContext.Provider value={adapters}>{children}</ApiContext.Provider>;
+}
+
+export function useApi(): ApiContextValue {
+  const ctx = useContext(ApiContext);
+  if (!ctx) throw new Error('useApi must be used inside <ApiProvider>');
+  return ctx;
+}
+
+───────────────────────────
+/adapters/ui/hooks/useRoutesHook.ts
+───────────────────────────
+
+import { useState, useEffect, useCallback } from 'react';
+import { useApi } from '@adapters/infrastructure/api/ApiContext';
+import { Route, RouteFilters } from '@core/domain/Route';
+
+export function useRoutes() {
+  const { routePort } = useApi();
+  const [routes, setRoutes] = useState<Route[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [filters, setFilters] = useState<RouteFilters>({});
+
+  const fetchRoutes = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await routePort.getRoutes(filters);
+      setRoutes(data);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to fetch routes');
+    } finally {
+      setLoading(false);
+    }
+  }, [routePort, filters]);
+
+  useEffect(() => { fetchRoutes(); }, [fetchRoutes]);
+
+  const handleSetBaseline = useCallback(async (routeId: string) => {
+    try {
+      await routePort.setBaseline(routeId);
+      await fetchRoutes();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to set baseline');
+    }
+  }, [routePort, fetchRoutes]);
+
+  return { routes, loading, error, filters, setFilters, setBaseline: handleSetBaseline, refresh: fetchRoutes };
+}
+
+───────────────────────────
+/adapters/ui/hooks/useComparisonHook.ts
+───────────────────────────
+
+useState + useEffect fetching routePort.getComparison() on mount.
+Return { baseline, comparisons, loading, error }.
+
+───────────────────────────
+/adapters/ui/hooks/useBankingHook.ts
+───────────────────────────
+
+Accept shipId and year as parameters.
+useState for cb, energyMj, records, loading, error, actionResult.
+useEffect fetches CB and records when shipId/year change.
+Expose: bankSurplus(amount), applyBanked(amount) — each refreshes CB after action.
+Return all state + actions.
+
+───────────────────────────
+/adapters/ui/hooks/usePoolHook.ts
+───────────────────────────
+
+useState for members (array of {shipId, cb}), poolResult, loading, error.
+Derived: poolSum = members.reduce((s,m) => s + m.cb, 0)
+Derived: isValid = poolSum >= 0 && members.length >= 2
+Expose: addMember(shipId, cb), removeMember(shipId), createPool(year).
+Return all state + derived + actions.
+```
+
+### PROMPT 7.1 - Frontend: Shared components and App shell
+
+```Build shared UI components and the App shell in /frontend/src/.
+
+───────────────────────────
+/adapters/ui/components/shared/LoadingSpinner.tsx
+───────────────────────────
+
+A simple centered spinner using TailwindCSS animate-spin.
+No props needed.
+
+───────────────────────────
+/adapters/ui/components/shared/ErrorBanner.tsx
+───────────────────────────
+
+Props: { message: string; onDismiss?: () => void }
+Red alert bar with an X button if onDismiss is provided.
+Use Tailwind: bg-red-50 border border-red-200 text-red-800 rounded-lg p-4.
+
+───────────────────────────
+/adapters/ui/components/shared/KPICard.tsx
+───────────────────────────
+
+Props: { label: string; value: string | number; unit?: string; variant?: 'default' | 'success' | 'danger' | 'warning' }
+A card showing label above, large value, and optional unit suffix.
+variant='success' → green border + text, 'danger' → red, 'warning' → amber.
+
+───────────────────────────
+/adapters/ui/components/shared/Badge.tsx
+───────────────────────────
+
+Props: { compliant: boolean }
+Show ✅ Compliant (green pill) or ❌ Non-compliant (red pill).
+
+───────────────────────────
+/adapters/ui/components/shared/TabNav.tsx
+───────────────────────────
+
+Props: { tabs: string[]; active: string; onChange: (tab: string) => void }
+Horizontal tab bar. Active tab: border-b-2 border-blue-600 text-blue-600.
+Inactive: text-gray-500 hover:text-gray-700.
+
+───────────────────────────
+/src/App.tsx
+───────────────────────────
+
+import { useState } from 'react';
+import { ApiProvider } from '@adapters/infrastructure/api/ApiContext';
+import TabNav from '@adapters/ui/components/shared/TabNav';
+import RoutesTab from '@adapters/ui/components/RoutesTab';
+import CompareTab from '@adapters/ui/components/CompareTab';
+import BankingTab from '@adapters/ui/components/BankingTab';
+import PoolingTab from '@adapters/ui/components/PoolingTab';
+
+const TABS = ['Routes', 'Compare', 'Banking', 'Pooling'];
+
+export default function App(): JSX.Element {
+  const [activeTab, setActiveTab] = useState('Routes');
+  return (
+    <ApiProvider>
+      <div className="min-h-screen bg-gray-50">
+        <header className="bg-white border-b border-gray-200 px-6 py-4">
+          <h1 className="text-xl font-semibold text-gray-900">FuelEU Maritime Dashboard</h1>
+          <p className="text-sm text-gray-500">Compliance Balance · Banking · Pooling</p>
+        </header>
+        <div className="bg-white border-b border-gray-200 px-6">
+          <TabNav tabs={TABS} active={activeTab} onChange={setActiveTab} />
+        </div>
+        <main className="px-6 py-6">
+          {activeTab === 'Routes'  && <RoutesTab />}
+          {activeTab === 'Compare' && <CompareTab />}
+          {activeTab === 'Banking' && <BankingTab />}
+          {activeTab === 'Pooling' && <PoolingTab />}
+        </main>
+      </div>
+    </ApiProvider>
+  );
+}
+
+───────────────────────────
+/src/main.tsx
+───────────────────────────
+
+Standard Vite React entry point. Import index.css with Tailwind directives.
+Create /src/index.css with @tailwind base; @tailwind components; @tailwind utilities;
+```
+
+### PROMPT 7.2 - Frontend: Routes Tab
+
+```Build /frontend/src/adapters/ui/components/RoutesTab.tsx
+
+Use the useRoutes() hook. All styling via TailwindCSS only.
+
+LAYOUT:
+  1. Page title row: "Routes" heading + subtitle "FuelEU route data"
+  2. Filter row: three <select> dropdowns side by side:
+     - Vessel Type: All | Container | BulkCarrier | Tanker | RoRo
+     - Fuel Type:   All | HFO | LNG | MGO
+     - Year:        All | 2024 | 2025
+     When a filter changes, call setFilters() immediately (live filtering).
+  3. Loading state: show <LoadingSpinner /> centered
+  4. Error state: show <ErrorBanner message={error} />
+  5. Data table (horizontal scroll wrapper for mobile):
+     Columns: Route ID | Vessel Type | Fuel Type | Year |
+              GHG Intensity (gCO₂e/MJ) | Fuel Consumption (t) |
+              Distance (km) | Total Emissions (t) | Action
+     
+     Row styling:
+       - Baseline row: bg-blue-50 with a "Baseline" badge in the Route ID cell
+       - Non-baseline rows: white/gray alternating
+     
+     Action column per row:
+       - If isBaseline: show a "✓ Baseline" gray pill (disabled, no click)
+       - If not baseline: show "Set Baseline" button (blue, onClick calls setBaseline(route.routeId))
+       - Show loading state on the button while the action is pending
+
+TYPES:
+  Use the Route interface from @core/domain/Route.
+  Import VESSEL_TYPES, FUEL_TYPES, YEARS from @shared/constants.
+```
+
+### PROMPT 7.3 - Frontend: Compare Tab
+
+```Build /frontend/src/adapters/ui/components/CompareTab.tsx
+
+Use the useComparison() hook. Import BarChart, Bar, XAxis, YAxis, Tooltip, 
+ReferenceLine, ResponsiveContainer, Cell from 'recharts'.
+
+LAYOUT:
+
+  1. Loading / error states at top
+
+  2. Baseline info card (when data loaded):
+     Show a highlighted card (blue border) with:
+       - "Baseline Route" label
+       - Route ID, Vessel Type, Fuel Type, Year
+       - GHG Intensity: X.XXXX gCO₂e/MJ
+       - Target: 89.3368 gCO₂e/MJ
+       - Status: ✅ Compliant or ❌ Non-compliant (compare baseline.ghgIntensity to 89.3368)
+
+  3. Bar chart (recharts ResponsiveContainer height=300):
+     - Data: [baseline, ...comparisons] all in one array
+       Each item: { name: routeId, ghg: ghgIntensity }
+     - Bar fill: blue (#3B82F6) for baseline, teal (#14B8A6) for others
+       Use Cell from recharts to apply per-bar color
+     - ReferenceLine y={89.3368} stroke="#EF4444" strokeDasharray="4 4" 
+       label={{ value: 'Target 89.34', fill: '#EF4444', fontSize: 12 }}
+     - XAxis dataKey="name", YAxis domain={[85, 96]} label="gCO₂e/MJ"
+     - Tooltip formatter: (value) => [`${value} gCO₂e/MJ`, 'GHG Intensity']
+
+  4. Comparison table:
+     Columns: Route ID | GHG Intensity | vs Baseline (%) | Compliant
+     
+     - GHG Intensity: format to 4 decimal places
+     - vs Baseline: format as "+X.XX%" or "-X.XX%" (red if positive = worse, green if negative = better)
+     - Compliant: use <Badge compliant={...} />
+     - Table header shows baseline row first (highlighted blue) then comparisons
+
+FORMULA REMINDER (computed by backend, just display):
+  percentDiff = ((comparison / baseline) - 1) * 100
+```
+
+### PROMPT 7.4 - Frontend: Banking Tab
+
+```Build /frontend/src/adapters/ui/components/BankingTab.tsx
+
+Implements FuelEU Article 20 — Banking.
+
+STATE:
+  - shipId: string (input), year: number (input), loaded: boolean
+  - Use useBanking(shipId, year) hook when loaded=true
+
+LAYOUT:
+
+  1. Page header: "Banking" title + "FuelEU Article 20 — Banking" subtitle in gray
+
+  2. Ship selector form (shown always):
+     - Row: "Ship ID" text input + "Year" number input + "Load" button
+     - On Load click: set loaded=true (triggers hook to fetch CB)
+     - Input placeholder: "e.g. R002"
+
+  3. When loaded=true and data available, show:
+
+     A. KPI row (3 cards side by side):
+        - "Current CB" : value with color (green if > 0, red if < 0, gray if 0)
+          Unit: tCO₂e  variant based on value
+        - "Energy in Scope": energyMj formatted as "X.XXM MJ"
+        - "Status": "Surplus" (green) or "Deficit" (red) based on CB sign
+
+     B. "Bank Surplus" section (Article 20.1):
+        - Small section heading
+        - Amount input (number, pre-filled with Math.max(0, cb) when CB loads)
+        - "Bank Surplus" button:
+            disabled={cb <= 0 || !amount || amount <= 0}
+            When disabled, show tooltip: "CB must be positive to bank"
+        - On success: show result KPI row: cb_before | banked | cb_after
+
+     C. "Apply Banked Surplus" section (Article 20.2):
+        - Amount input (number)
+        - "Apply to Deficit" button:
+            disabled={availableBanked <= 0}
+            "Available banked: X.XX tCO₂e" shown beneath
+        - On success: show result KPI row: cb_before | applied | cb_after
+
+     D. Error banner if any action fails
+
+  4. Loading states: show spinner while fetching CB, show button loading state during actions
+```
+
+### PROMPT 7.5 - Frontend:  Pooling Tab
+
+```Build /frontend/src/adapters/ui/components/PoolingTab.tsx
+
+Implements FuelEU Article 21 — Pooling.
+
+STATE: Use usePool() hook.
+
+LAYOUT:
+
+  1. Page header: "Pooling" title + "FuelEU Article 21 — Pooling" subtitle
+
+  2. Year selector: number input labeled "Pool Year" (default 2025)
+
+  3. "Add Member" form row:
+     - Ship ID text input + CB value number input (allow negative) + "Add Member" button
+     - Validate: shipId not empty, cb is a valid number
+     - Prevent adding duplicate shipId
+     - "Add Member" button disabled after pool is created
+
+  4. Members table (shown when members.length > 0):
+     Columns: Ship ID | CB Before | CB After | Action
+     - CB Before: the input value, colored red if negative, green if positive
+     - CB After: shown as "—" before pool creation, filled after
+     - CB After coloring: red if negative, green if positive
+     - Action: "Remove" button (disabled after pool is created)
+
+  5. Pool summary bar (always visible when members.length > 0):
+     Full-width bar showing:
+       "Pool Sum CB: X.XX tCO₂e"
+       If poolSum >= 0: green background (bg-green-50 border-green-200 text-green-800)
+       If poolSum < 0:  red background (bg-red-50 border-red-200 text-red-800)
+       Status text: "✓ Valid pool" or "✗ Invalid — pool sum must be ≥ 0"
+
+  6. "Create Pool" button:
+     disabled={!isValid || loading || poolCreated}
+     "Create Pool" (primary blue button, full-width on mobile)
+     Show tooltip text when disabled: reason from validatePool()
+
+  7. On success: 
+     - Show green success banner: "Pool created · ID: {pool.id}"
+     - Fill in CB After column in table
+     - Lock all form inputs (pool is immutable after creation)
+
+  8. Error banner on API failure
+
+IMPORTANT: Import validatePool from @core/domain — reuse the same pure function for
+  client-side validation before even calling the API. This ensures the button disables
+  in real-time as members are added/removed.
+```
+
