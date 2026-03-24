@@ -176,16 +176,16 @@ fueleu-maritime/
 
 > **Routes Tab** — Filter by vessel type, fuel type, or year. Set any route as the baseline.
 
-![Routes Tab](docs/screenshots/routes-tab.png)
+![Routes Tab](frontend\src\public\screenshots\routes-tab.png)
 
 > **Compare Tab** — Bar chart of GHG intensities with the 89.34 target line. Table shows % diff and compliance status.
 
-![Compare Tab](docs/screenshots/compare-tab.png)
+![Compare Tab](frontend\src\public\screenshots\compare-tab.png)
 
 > **Banking Tab** — Load a ship's compliance balance. Bank surplus or apply banked surplus to a deficit.
 
-![Banking Tab](docs/screenshots/banking-tab.png)
+![Banking Tab](frontend\src\public\screenshots\banking-tab.png)
 
 > **Pooling Tab** — Add ships to a pool, see real-time validation, and create the pool when the aggregate CB ≥ 0.
 
-![Pooling Tab](docs/screenshots/pooling-tab.png)
+![Pooling Tab](frontend\src\public\screenshots\pooling-tab.png)

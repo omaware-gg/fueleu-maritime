@@ -2094,3 +2094,37 @@ Use:
 Make it look like a modern macOS / Vercel style UI.
 ```
 
+### PROMPT 10 - End-to-end Smoke Test
+
+```Do a final audit of the entire codebase and fix any remaining issues.
+
+BACKEND CHECKS:
+1. Run tsc --noEmit — fix ALL TypeScript errors (no warnings tolerated in strict mode)
+2. Run: grep -r "from 'express'" src/core/ → must return empty
+3. Run: grep -r "from 'pg'" src/core/ → must return empty
+4. Verify npm run dev starts without errors and all endpoints respond:
+   curl http://localhost:3001/health → {"status":"ok"}
+   curl http://localhost:3001/routes → array of 5 items
+   curl http://localhost:3001/routes/comparison → {baseline: {routeId:"R004",...}, comparisons:[...]}
+
+FRONTEND CHECKS:
+5. Run tsc --noEmit — fix ALL TypeScript errors
+6. Run: grep -r "useState" src/core/ → must return empty
+7. Verify npm run dev starts and all 4 tabs render without console errors
+8. Verify the Vite proxy is working: in the browser Network tab, calls to /api/* 
+   should return 200 from the backend (no CORS errors)
+
+ARCHITECTURE CHECKS:
+9. Verify no file in backend/src/core/ imports from: express, pg, axios, react, jest
+10. Verify no file in frontend/src/core/ imports from: react, axios, @testing-library
+
+SEED DATA CHECK:
+11. GET /routes/comparison must return R004 (RoRo, HFO, 2025, 89.2) as the baseline
+    If it doesn't, run: npm run db:seed in backend to reset
+
+ROOT SCRIPTS CHECK:
+12. From repo root, run: npm run dev (should start both services with concurrently)
+13. From repo root, run: npm run test (should run both test suites)
+
+Fix any issues found above before the final commit.
+```
